@@ -5,6 +5,8 @@ using AuctionService.Dtos;
 using AuctionService.Entities;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
+using Contracts;
+using MassTransit;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,11 +18,13 @@ public class AuctionController: ControllerBase
 {
     private readonly AuctionDbContext _context;
     private readonly IMapper _mapper;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public AuctionController(AuctionDbContext auctionDbContext, IMapper mapper)
+    public AuctionController(AuctionDbContext auctionDbContext, IMapper mapper, IPublishEndpoint  publishEndpoint)
     {
         _context = auctionDbContext;
         _mapper = mapper;
+        _publishEndpoint = publishEndpoint;
     }
 
     [HttpGet]
@@ -60,15 +64,18 @@ public class AuctionController: ControllerBase
         auction.Seller = "test user";  // Todo: Add current user as seller, atm we dont have Identity to inject current user into our request
         _context.Auctions.Add(auction);
 
+        var newAuction = _mapper.Map<AuctionDto>(auction);
+        await _publishEndpoint.Publish(_mapper.Map<AuctionCreated>(newAuction));
+        
         var result = await _context.SaveChangesAsync() > 0;
-
+        
         if (!result)
         {
             BadRequest("something went wrong, don't saved to Db");
         }
 
         return CreatedAtAction
-            (nameof(GetAuctionById), new { auction.Id }, _mapper.Map<AuctionDto>(auction));
+            (nameof(GetAuctionById), new { auction.Id }, newAuction);
     }
 
     [HttpPut("{id}")]
