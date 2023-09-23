@@ -100,13 +100,12 @@ public class AuctionController: ControllerBase
         auction.Item.Color = updateAuctionDto.Color ?? auction.Item.Color;
         auction.Item.Mileage = updateAuctionDto.Mileage ?? auction.Item.Mileage;
         auction.Item.Year = updateAuctionDto.Year ?? auction.Item.Year;
-       
+        
+        await _publishEndpoint.Publish(_mapper.Map<AuctionUpdated>(auction));
+        
         var result = await _context.SaveChangesAsync() > 0;
 
-        if (result)
-        {
-            return Ok();
-        }
+        if (result) return Ok();
         
         return BadRequest("problem saving changes");
     }
@@ -121,7 +120,8 @@ public class AuctionController: ControllerBase
         // Todo: Add current user as seller, atm we dont have Identity to inject current user into our request
         
         if (auction == null) return NotFound("Item not found");
-
+        // from here we need to emmit the event to delete the auction from DB
+        await _publishEndpoint.Publish<AuctionDeleted>(new { Id = auction.Id.ToString()}); // event emmited to RabitMQ
         _context.Auctions.Remove(auction);
         
       var result =  await  _context.SaveChangesAsync() > 0;

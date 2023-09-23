@@ -7,10 +7,10 @@ namespace SearchService.Controllers;
 
 [ApiController]
 [Route("api/search")]
-public class SearchController: ControllerBase
+public class SearchController : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<List<Item>>> SearchItem([FromQuery]SearchParams searchParams)
+    public async Task<ActionResult<List<Item>>> SearchItem([FromQuery] SearchParams searchParams)
     {
         var query = DB.PagedSearch<Item, Item>();
 
@@ -56,5 +56,18 @@ public class SearchController: ControllerBase
             pageCount = result.PageCount,
             totalCount = result.TotalCount
         });
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<ActionResult> DeleteAuction(Guid id)
+    {
+        var item = await DB.Find<Item>().OneAsync($"{id}");
+        if (item == null)
+        {
+            return NotFound($"Item with Id {id} not found in Search Db");
+        }
+
+        await DB.DeleteAsync<Item>($"{id}");
+        return Ok("Item deleted successfully");
     }
 }
