@@ -7,6 +7,7 @@ using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Contracts;
 using MassTransit;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -57,11 +58,12 @@ public class AuctionController: ControllerBase
         return _mapper.Map<AuctionDto>(auction);
     }
     
+    [Authorize]
     [HttpPost]
     public async Task<ActionResult<AuctionDto>> CreateAuction(CreateAuctionDto auctionDto)
     {
         var auction = _mapper.Map<Auction>(auctionDto); // Its act like a JS spread operator
-        auction.Seller = "test user";  // Todo: Add current user as seller, atm we dont have Identity to inject current user into our request
+        auction.Seller = User?.Identity?.Name;  // Identity to inject current user into our request
         _context.Auctions.Add(auction);
 
         var newAuction = _mapper.Map<AuctionDto>(auction);
@@ -77,7 +79,7 @@ public class AuctionController: ControllerBase
         return CreatedAtAction
             (nameof(GetAuctionById), new { auction.Id }, newAuction);
     }
-
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<ActionResult> UpdateAuction(Guid id,UpdateAuctionDto updateAuctionDto)
     {
@@ -87,12 +89,12 @@ public class AuctionController: ControllerBase
         
         if (auction==null)
         {
-            BadRequest("auction not found with Id");
+            return BadRequest("auction not found with Id");
         }
 
-        if (auction!.Seller != "test user")
+        if (auction!.Seller != User?.Identity?.Name)
         {
-            Unauthorized("you are not authorized");  // Todo: Add current is equal to seller name,
+           return Forbid(); 
         }
 
         auction.Item.Make = updateAuctionDto.Make ?? auction.Item.Make;
@@ -109,17 +111,19 @@ public class AuctionController: ControllerBase
         
         return BadRequest("problem saving changes");
     }
-
+    
+    [Authorize]
     [HttpDelete("{id}")]
     public async Task<ActionResult> DeleteAuction(Guid id)
     {
         var auction = await _context.Auctions
             .Include(x => x.Item)
             .FirstOrDefaultAsync(x => x.Id == id);
-       
-        // Todo: Add current user as seller, atm we dont have Identity to inject current user into our request
         
         if (auction == null) return NotFound("Item not found");
+        
+        if (auction!.Seller != User?.Identity?.Name) return Forbid(); 
+        
         // from here we need to emmit the event to delete the auction from DB
         await _publishEndpoint.Publish<AuctionDeleted>(new { Id = auction.Id.ToString()}); // event emmited to RabitMQ
         _context.Auctions.Remove(auction);
